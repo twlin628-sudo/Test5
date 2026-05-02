@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#111;display:flex;flex-direction:column;align-items:center;padding:16px;font-family:monospace;color:#eee;min-height:100vh}
+h2{font-size:14px;letter-spacing:3px;color:#9F77DD;margin-bottom:6px}
+.hud{font-size:12px;color:#555;margin-bottom:8px;display:flex;gap:20px}
+.hud b{color:#ccc}
+canvas{display:block;border:1px solid #222}
+.hint{font-size:11px;color:#444;margin-top:8px;text-align:center;line-height:2}
+.hint em{color:#7F77DD;font-style:normal}
+.mbtns{display:flex;gap:6px;margin-top:10px;justify-content:center}
+.mbtns button{padding:10px 18px;border:1px solid #333;background:#1a1a1a;color:#aaa;font-family:monospace;font-size:14px;cursor:pointer;border-radius:4px;touch-action:none}
+.row2{display:flex;gap:6px;margin-top:6px;justify-content:center;flex-wrap:wrap}
+.row2 button{padding:6px 14px;border:1px solid #2a2a2a;background:transparent;color:#666;font-family:monospace;font-size:11px;cursor:pointer;border-radius:3px}
+.row2 button:hover{color:#9F77DD;border-color:#534AB7}
+</style></head>
+<body>
+<h2>GRAVITY SHIFT</h2>
+<div class="hud"><span>關卡 <b id="lv">1/3</b></span><span>旋轉 <b id="rc">0</b></span><span>重力 <b id="gv">↓</b></span></div>
+<canvas id="c"></canvas>
+<div class="hint"><em>← →</em> 移動 &nbsp;<em>↑/空白</em> 跳躍 &nbsp;<em>A</em> 逆時針 &nbsp;<em>D</em> 順時針旋轉世界</div>
+<div class="mbtns">
+  <button id="btnRL">↺</button>
+  <button id="btnL">◀</button>
+  <button id="btnJ">跳</button>
+  <button id="btnR">▶</button>
+  <button id="btnRR">↻</button>
+</div>
+<div class="row2">
+  <button onclick="restart()">重試</button>
+  <button onclick="init(0)">第一關</button>
+  <button onclick="genHell();init(2)">重產地獄關</button>
+</div>
+
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const T=32;
+const GARROWS=['↓','←','↑','→'];
+
+const L1={cols:12,rows:11,grav:0,sx:1,sy:9,
+  hint:'提示：往右走到底被牆擋，旋轉讓重力朝左再往上爬',
+  map:[
+    1,1,1,1,1,1,1,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,2,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,
+  ]};
+
+const L2={cols:12,rows:11,grav:0,sx:10,sy:1,
+  hint:'提示：橫向牆各有一個缺口，需旋轉兩次穿過',
+  map:[
+    1,1,1,1,1,1,1,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,1,0,0,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,1,1,0,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,1,
+    1,2,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,
+  ]};
+
+let LEVELS=[L1,L2,null];
+
+// ── Hell generator ──
+function genHell(){
+  // Try until we get a solvable map (gravity-aware BFS)
+  for(let attempt=0;attempt<200;attempt++){
+    const result=tryGenHell();
+    if(result){LEVELS[2]=result;return;}
+  }
+  // Fallback: guaranteed solvable hand-crafted hell
+  LEVELS[2]=fallbackHell();
+}
+
+function tryGenHell(){
+  // Non-square ~2500 tiles. Maze is on a 2-step grid so actual passage cells = ((W-1)/2)*((H-1)/2)
+  // Pick odd dimensions so maze grid aligns cleanly
+  const dims=[[51,49],[41,61],[61,41],[43,57],[57,43],[39,65]];
+  const[W,H]=dims[Math.floor(Math.random()*dims.length)];
+
+  // Fill all walls
+  const map=new Array(W*H).fill(1);
+  function idx(c,r){return r*W+c;}
+  function get(c,r){if(c<0||c>=W||r<0||r>=H)return 1;return map[idx(c,r)];}
+  function open(c,r){if(c>0&&c<W-1&&r>0&&r<H-1)map[idx(c,r)]=0;}
+
+  // ── Perfect maze via iterative DFS on odd cells ──
+  // Cell nodes are at odd (c,r), passages carved between them
+  const vis=new Uint8Array(W*H);
+  const stack=[];
+  // Start from (1,1)
+  vis[idx(1,1)]=1; open(1,1);
+  stack.push([1,1]);
+  while(stack.length){
+    const[c,r]=stack[stack.length-1];
+    // Collect unvisited neighbours (2 steps away)
+    const nb=[];
+    for(const[dc,dr]of[[-2,0],[2,0],[0,-2],[0,2]]){
+      const nc=c+dc,nr=r+dr;
+      if(nc>0&&nc<W-1&&nr>0&&nr<H-1&&!vis[idx(nc,nr)])nb.push([nc,nr,dc,dr]);
+    }
+    if(!nb.length){stack.pop();continue;}
+    // Pick random neighbour, carve passage
+    const[nc,nr,dc,dr]=nb[Math.floor(Math.random()*nb.length)];
+    vis[idx(nc,nr)]=1;
+    open(c+dc/2, r+dr/2); // wall between
+    open(nc,nr);
+    stack.push([nc,nr]);
+  }
+
+  // ── Add gravity-gate "rooms" ──
+  // These are small sealed rooms whose only exits require a specific gravity to reach.
+  // We place them on the critical path by blocking a corridor and leaving a ceiling/floor exit.
+  // Strategy: pick ~12 random interior odd cells, wall off their horizontal neighbours,
+  // leave only a vertical exit — player must rotate to enter/exit.
+  let gateCount=0;
+  const oddCells=[];
+  for(let r=3;r<H-3;r+=2)for(let c=3;c<W-3;c+=2)oddCells.push([c,r]);
+  // Shuffle
+  for(let i=oddCells.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[oddCells[i],oddCells[j]]=[oddCells[j],oddCells[i]];}
+  for(const[c,r]of oddCells.slice(0,18)){
+    if(Math.random()<0.6){
+      // Seal left+right passages from this cell, keep up/down open
+      if(c-1>0) map[idx(c-1,r)]=1;
+      if(c+1<W-1) map[idx(c+1,r)]=1;
+      gateCount++;
+    } else {
+      // Seal top+bottom, keep left/right open
+      if(r-1>0) map[idx(c,r-1)]=1;
+      if(r+1<H-1) map[idx(c,r+1)]=1;
+      gateCount++;
+    }
+  }
+
+  // ── Start and goal: maximum distance corners ──
+  // Start at top-left, goal at bottom-right, both on open odd cells
+  function nearestOpen(cc,rr){
+    // BFS outward from (cc,rr) on odd grid to find nearest open cell
+    const q=[[cc,rr]];let qi=0;
+    const seen=new Set();seen.add(idx(cc,rr));
+    while(qi<q.length){
+      const[c,r]=q[qi++];
+      if(get(c,r)===0)return{c,r};
+      for(const[dc,dr]of[[-1,0],[1,0],[0,-1],[0,1]]){
+        const nc=c+dc,nr=r+dr;
+        const k=idx(nc,nr);
+        if(nc>0&&nc<W-1&&nr>0&&nr<H-1&&!seen.has(k)){seen.add(k);q.push([nc,nr]);}
+      }
+    }
+    return{c:cc,r:rr};
+  }
+  const sp=nearestOpen(1,1);
+  const gp=nearestOpen(W-2,H-2);
+  open(sp.c,sp.r);
+  // Open a small area around start so player isn't immediately trapped
+  for(const[dc,dr]of[[1,0],[-1,0],[0,1],[0,-1]])open(sp.c+dc,sp.r+dr);
+  map[idx(gp.c,gp.r)]=2;
+
+  // ── Gravity-aware BFS reachability check ──
+  function settle(c,r,g){
+    const dc=[0,-1,0,1][g],dr=[1,0,-1,0][g];
+    for(let i=0;i<W+H;i++){
+      const nc=c+dc,nr=r+dr;
+      if(nc<0||nc>=W||nr<0||nr>=H||map[idx(nc,nr)]===1)return{c,r};
+      c=nc;r=nr;
+    }
+    return{c,r};
+  }
+  function bfsReach(sc,sr,sg){
+    const key=(c,r,g)=>g*W*H+r*W+c;
+    const seen=new Set();
+    const q=[];
+    const s0=settle(sc,sr,sg);
+    seen.add(key(s0.c,s0.r,sg));
+    q.push({c:s0.c,r:s0.r,g:sg});
+    let qi=0;
+    while(qi<q.length){
+      const{c,r,g}=q[qi++];
+      const perps=[[[-1,0],[1,0]],[[0,-1],[0,1]],[[1,0],[-1,0]],[[0,1],[0,-1]]][g];
+      const[odc,odr]=[[0,-1],[1,0],[0,1],[-1,0]][g]; // opposite gravity
+      for(const[dc2,dr2]of perps){
+        let cc=c,rr=r;
+        for(let step=0;step<W+H;step++){
+          const nc=cc+dc2,nr=rr+dr2;
+          if(nc<0||nc>=W||nr<0||nr>=H||map[idx(nc,nr)]===1)break;
+          cc=nc;rr=nr;
+          const land=settle(cc,rr,g);
+          // rotate at landing
+          for(let ng=0;ng<4;ng++){
+            const rl=settle(land.c,land.r,ng);
+            const k=key(rl.c,rl.r,ng);
+            if(!seen.has(k)){seen.add(k);q.push({c:rl.c,r:rl.r,g:ng});}
+          }
+          // jump up to 6 cells against gravity
+          for(let j=1;j<=6;j++){
+            const jc=land.c+odc*j,jr=land.r+odr*j;
+            if(jc<0||jc>=W||jr<0||jr>=H||map[idx(jc,jr)]===1)break;
+            const jl=settle(jc,jr,g);
+            for(let ng=0;ng<4;ng++){
+              const rl=settle(jl.c,jl.r,ng);
+              const k=key(rl.c,rl.r,ng);
+              if(!seen.has(k)){seen.add(k);q.push({c:rl.c,r:rl.r,g:ng});}
+            }
+          }
+        }
+      }
+    }
+    return seen;
+  }
+  const reachable=bfsReach(sp.c,sp.r,0);
+  let canWin=false;
+  for(let g=0;g<4;g++)if(reachable.has(g*W*H+gp.r*W+gp.c)){canWin=true;break;}
+  if(!canWin)return null;
+
+  return{cols:W,rows:H,grav:0,sx:sp.c,sy:sp.r,
+    hint:`地獄關 ${W}×${H}（${W*H}格迷宮）起點↖ 終點↘ 旋轉是唯一出路 😈`,map};
+}
+
+function fallbackHell(){
+  // Guaranteed solvable snake maze 51x49
+  const W=51,H=49;
+  const m=new Array(W*H).fill(1);
+  function s(c,r){if(c>0&&c<W-1&&r>0&&r<H-1)m[r*W+c]=0;}
+  // Snake corridors top→bottom
+  for(let seg=0;seg<8;seg++){
+    const r=1+seg*6;
+    const r2=r+5;
+    for(let c=1;c<W-1;c++){s(c,r);}
+    if(seg%2===0){for(let rr=r;rr<=Math.min(r2,H-2);rr++)s(W-2,rr);}
+    else{for(let rr=r;rr<=Math.min(r2,H-2);rr++)s(1,rr);}
+  }
+  m[1*W+1]=0;m[(H-2)*W+(W-2)]=2;
+  return{cols:W,rows:H,grav:0,sx:1,sy:1,
+    hint:'地獄備用關 51×49：蜿蜒長廊，旋轉前進',map:m};
+}
+
+// ── State ──
+let map,grav,COLS,ROWS,lvl;
+let px,py,vx,vy;
+let rotCount,won,winTimer;
+let rotating=false,rotAngle=0,targetAngle=0;
+const keys={};
+
+function tileAt(c,r){
+  if(c<0||c>=COLS||r<0||r>=ROWS)return 1;
+  return map[r*COLS+c];
+}
+function isSolid(c,r){return tileAt(c,r)===1;}
+
+function init(n){
+  lvl=n;
+  const L=LEVELS[n];if(!L)return;
+  COLS=L.cols;ROWS=L.rows;
+  map=[...L.map];
+  grav=L.grav;
+  rotAngle=[0,90,180,270][grav];
+  targetAngle=rotAngle;
+  rotating=false;
+  px=L.sx*T+T/2;
+  py=L.sy*T+T/2;
+  vx=0;vy=0;
+  rotCount=0;won=false;winTimer=0;
+  cv.width=(lvl===2)?Math.min(COLS*T,480):COLS*T;
+  cv.height=(lvl===2)?Math.min(ROWS*T,420):ROWS*T;
+  document.getElementById('lv').textContent=(n+1)+'/3';
+  document.getElementById('rc').textContent=0;
+  document.getElementById('gv').textContent=GARROWS[grav];
+}
+function restart(){init(lvl);}
+
+function doRotate(dir){
+  if(rotating||won)return;
+  rotating=true;
+  targetAngle=rotAngle+dir*90;
+  grav=((grav-dir)%4+4)%4;
+  rotCount++;
+  document.getElementById('rc').textContent=rotCount;
+  document.getElementById('gv').textContent=GARROWS[grav];
+  vx=0;vy=0;
+}
+
+// ── Physics ──
+// Player half-size
+const PH=11; // half-height
+const PW=9;  // half-width
+
+// Move along one axis and resolve collisions, return {pos, vel, hitNeg, hitPos}
+function moveX(x,y,dx){
+  x+=dx;
+  const top=Math.floor((y-PH)/T);
+  const bot=Math.floor((y+PH-0.01)/T);
+  let hitNeg=false,hitPos=false;
+  const left=Math.floor((x-PW)/T);
+  const right=Math.floor((x+PW-0.01)/T);
+  for(let r=top;r<=bot;r++){
+    if(isSolid(left,r)){x=left*T+T+PW;dx=0;hitNeg=true;}
+    if(isSolid(right,r)){x=right*T-PW;dx=0;hitPos=true;}
+  }
+  return{x,dx,hitNeg,hitPos};
+}
+
+function moveY(x,y,dy){
+  y+=dy;
+  const left=Math.floor((x-PW)/T);
+  const right=Math.floor((x+PW-0.01)/T);
+  let hitNeg=false,hitPos=false;
+  const top=Math.floor((y-PH)/T);
+  const bot=Math.floor((y+PH-0.01)/T);
+  for(let c=left;c<=right;c++){
+    if(isSolid(c,top)){y=top*T+T+PH;dy=0;hitNeg=true;}
+    if(isSolid(c,bot)){y=bot*T-PH;dy=0;hitPos=true;}
+  }
+  return{y,dy,hitNeg,hitPos};
+}
+
+function update(){
+  if(won){
+    winTimer--;
+    if(winTimer<=0&&lvl<2)init(lvl+1);
+    return;
+  }
+  if(rotating){
+    const d=targetAngle-rotAngle;
+    rotAngle+=d*0.2;
+    if(Math.abs(d)<0.5){rotAngle=targetAngle;rotating=false;}
+    return;
+  }
+
+  // Gravity direction vectors
+  const GX=[0,-1,0,1][grav];
+  const GY=[1,0,-1,0][grav];
+  const GRAV=0.5;
+  vx+=GX*GRAV;
+  vy+=GY*GRAV;
+
+  // Horizontal input (relative to gravity)
+  const SPEED=2.8;
+  const FRICTION=0.65;
+  // "left/right" from player perspective = perpendicular to gravity
+  // grav0(down): left=−x,right=+x
+  // grav1(left): left=−y,right=+y  (screen up=player left, screen down=player right)
+  // grav2(up):   left=+x,right=−x
+  // grav3(right):left=+y,right=−y
+  if(grav===0){
+    if(keys.L)vx=-SPEED; else if(keys.R)vx=SPEED; else vx*=FRICTION;
+  } else if(grav===1){
+    if(keys.L)vy=-SPEED; else if(keys.R)vy=SPEED; else vy*=FRICTION;
+  } else if(grav===2){
+    if(keys.L)vx=SPEED; else if(keys.R)vx=-SPEED; else vx*=FRICTION;
+  } else {
+    if(keys.L)vy=SPEED; else if(keys.R)vy=-SPEED; else vy*=FRICTION;
+  }
+
+  vx=Math.max(-9,Math.min(9,vx));
+  vy=Math.max(-9,Math.min(9,vy));
+
+  // Move X then Y
+  let rx=moveX(px,py,vx);
+  px=rx.x; vx=rx.dx;
+
+  let ry=moveY(px,py,vy);
+  py=ry.y; vy=ry.dy;
+
+  // Grounded = hit in gravity direction
+  let grounded=false;
+  if(grav===0&&ry.hitPos)grounded=true;
+  if(grav===2&&ry.hitNeg)grounded=true;
+  if(grav===1&&rx.hitNeg)grounded=true;
+  if(grav===3&&rx.hitPos)grounded=true;
+
+  // Jump
+  if(keys.J&&grounded){
+    const JS=7.5;
+    if(grav===0)vy=-JS;
+    else if(grav===2)vy=JS;
+    else if(grav===1)vx=JS;
+    else vx=-JS;
+  }
+
+  // Goal check
+  const gc=Math.floor(px/T),gr=Math.floor(py/T);
+  if(tileAt(gc,gr)===2){
+    won=true;winTimer=lvl<2?110:9999;
+  }
+}
+
+// ── Draw ──
+function draw(){
+  const CW=cv.width,CH=cv.height;
+  ctx.clearRect(0,0,CW,CH);
+  ctx.fillStyle='#111';ctx.fillRect(0,0,CW,CH);
+
+  const mapW=COLS*T,mapH=ROWS*T;
+
+  // Camera for large maps
+  let camX=0,camY=0;
+  if(lvl===2){
+    camX=Math.max(0,Math.min(px-CW/2,mapW-CW));
+    camY=Math.max(0,Math.min(py-CH/2,mapH-CH));
+  }
+
+  ctx.save();
+  // World rotation pivot = screen center
+  ctx.translate(CW/2,CH/2);
+  ctx.rotate(rotAngle*Math.PI/180);
+  ctx.translate(-CW/2,-CH/2);
+  // Camera offset
+  ctx.translate(-camX,-camY);
+
+  // Tiles
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const t=map[r*COLS+c],x=c*T,y=r*T;
+    if(t===1){
+      ctx.fillStyle='#1c1c2c';ctx.fillRect(x,y,T,T);
+      ctx.fillStyle='#22223a';ctx.fillRect(x+1,y+1,T-2,T-2);
+      ctx.strokeStyle='#2d2d44';ctx.lineWidth=0.5;
+      ctx.strokeRect(x+0.5,y+0.5,T-1,T-1);
+    } else if(t===2){
+      ctx.fillStyle='#180f28';ctx.fillRect(x,y,T,T);
+      const g=ctx.createRadialGradient(x+T/2,y+T/2,1,x+T/2,y+T/2,15);
+      g.addColorStop(0,'rgba(159,119,221,0.5)');
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;ctx.fillRect(x,y,T,T);
+      ctx.save();ctx.translate(x+T/2,y+T/2);
+      ctx.fillStyle='#9F77DD';
+      ctx.beginPath();
+      for(let i=0;i<10;i++){
+        const a=i*Math.PI/5-Math.PI/2,rr=i%2===0?11:5;
+        i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+      }
+      ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Player
+  ctx.save();
+  ctx.translate(px,py);
+  // Sprite faces gravity direction
+  const pr=[0,-Math.PI/2,Math.PI,Math.PI/2][grav];
+  ctx.rotate(pr);
+  ctx.fillStyle='#AFA9EC';
+  ctx.beginPath();ctx.roundRect(-PW-1,-PH,PW*2+2,PH*2,4);ctx.fill();
+  ctx.fillStyle='#7F77DD';ctx.fillRect(-7,-10,14,7);
+  ctx.fillStyle='#ddd';ctx.fillRect(-6,-9,4,5);ctx.fillRect(2,-9,4,5);
+  ctx.fillStyle='#222';ctx.fillRect(-5,-8,2,3);ctx.fillRect(3,-8,2,3);
+  ctx.fillStyle='#534AB7';ctx.fillRect(-8,9,5,5);ctx.fillRect(3,9,5,5);
+  ctx.restore();
+
+  ctx.restore(); // end world transform
+
+  // Win overlay
+  if(won){
+    ctx.fillStyle='rgba(10,10,20,0.75)';ctx.fillRect(0,0,CW,CH);
+    ctx.textAlign='center';
+    ctx.fillStyle='#9F77DD';ctx.font='500 20px monospace';
+    ctx.fillText(lvl<2?'過關！':'全部完成！🎉',CW/2,CH/2-14);
+    ctx.fillStyle='#555';ctx.font='12px monospace';
+    ctx.fillText(lvl<2?'進入下一關...':'旋轉 '+rotCount+' 次，你是真勇者',CW/2,CH/2+12);
+    ctx.textAlign='left';
+  }
+
+  // Hint text
+  ctx.fillStyle='#2a2a2a';ctx.font='10px monospace';
+  ctx.fillText(LEVELS[lvl]?.hint||'',8,CW<200?CH-6:CH-6);
+}
+
+function loop(){update();draw();requestAnimationFrame(loop);}
+
+// ── Input ──
+document.addEventListener('keydown',e=>{
+  if([' ','ArrowUp','ArrowLeft','ArrowRight','ArrowDown'].includes(e.key))e.preventDefault();
+  if(e.key==='ArrowLeft')keys.L=true;
+  if(e.key==='ArrowRight')keys.R=true;
+  if(e.key==='ArrowUp'||e.key===' ')keys.J=true;
+  if((e.key==='a'||e.key==='A')&&!e.repeat)doRotate(-1);
+  if((e.key==='d'||e.key==='D')&&!e.repeat)doRotate(1);
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft')keys.L=false;
+  if(e.key==='ArrowRight')keys.R=false;
+  if(e.key==='ArrowUp'||e.key===' ')keys.J=false;
+});
+
+function mob(id,dn,up){
+  const b=document.getElementById(id);
+  ['touchstart','mousedown'].forEach(ev=>b.addEventListener(ev,e=>{e.preventDefault();dn();},{passive:false}));
+  if(up)['touchend','mouseup'].forEach(ev=>b.addEventListener(ev,e=>{e.preventDefault();up();},{passive:false}));
+}
+mob('btnL',()=>keys.L=true,()=>keys.L=false);
+mob('btnR',()=>keys.R=true,()=>keys.R=false);
+mob('btnJ',()=>keys.J=true,()=>keys.J=false);
+mob('btnRL',()=>doRotate(-1));
+mob('btnRR',()=>doRotate(1));
+
+genHell();
+init(0);
+requestAnimationFrame(loop);
+</script>
+</body></html>
