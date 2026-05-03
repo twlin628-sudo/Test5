@@ -7,18 +7,19 @@ body{background:#F2F2F7;display:flex;flex-direction:column;align-items:center;fo
 h2{font-size:18px;font-weight:700;letter-spacing:2px;color:#5856D6;margin-bottom:6px}
 .hud{display:flex;gap:16px;margin-bottom:8px;font-size:13px;color:#8E8E93}
 .hud b{color:#1C1C1E;font-weight:600}
-#loading{font-size:14px;color:#8E8E93;margin:16px 0;display:none}
+#loading{font-size:14px;color:#8E8E93;margin:8px 0;display:none}
 canvas{display:block;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.13)}
 .hint{font-size:12px;color:#8E8E93;margin-top:8px;text-align:center;line-height:1.8;padding:0 16px}
 .hint em{color:#5856D6;font-style:normal;font-weight:600}
 .controls{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .ctrl-row{display:flex;gap:6px;align-items:center;justify-content:center}
-.btn{width:68px;height:68px;border-radius:16px;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;transition:background 0.1s,transform 0.08s;-webkit-tap-highlight-color:transparent}
+.btn{width:68px;height:68px;border-radius:16px;border:none;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-tap-highlight-color:transparent}
 .btn:active{transform:scale(0.93)}
 .btn-move{background:#fff;color:#1C1C1E;box-shadow:0 2px 8px rgba(0,0,0,0.12)}
 .btn-rot{background:#5856D6;color:#fff;box-shadow:0 2px 12px rgba(88,86,214,0.35)}
+.btn-jump{background:#34C759;color:#fff;box-shadow:0 2px 12px rgba(52,199,89,0.35)}
 .row2{display:flex;gap:10px;margin-top:10px;justify-content:center;flex-wrap:wrap}
-.row2 button{padding:10px 20px;border:1.5px solid #C7C7CC;background:#fff;color:#5856D6;font-family:-apple-system,sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.row2 button{padding:10px 20px;border:1.5px solid #C7C7CC;background:#fff;color:#5856D6;font-family:-apple-system,sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-radius:10px}
 .row2 button:active{background:#F2F2F7}
 </style></head>
 <body>
@@ -26,13 +27,14 @@ canvas{display:block;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.13)}
 <div class="hud"><span>關卡 <b id="lv">1/3</b></span><span>旋轉 <b id="rc">0</b></span><span>重力 <b id="gv">↓</b></span></div>
 <div id="loading">⚙️ 生成地獄關卡中...</div>
 <canvas id="c" width="390" height="390"></canvas>
-<div class="hint"><em>A/D</em> 旋轉世界 &nbsp;<em>←→</em> 移動 &nbsp;<em>↑/空白</em> 跳躍</div>
+<div class="hint"><em>A/D</em> 旋轉 &nbsp;<em>←→</em> 移動 &nbsp;<em>↑/空白</em> 跳躍</div>
 <div class="controls">
   <div class="ctrl-row">
-    <button class="btn btn-rot" id="btnRL">↺</button>
-    <button class="btn btn-move" id="btnL">←</button>
-    <button class="btn btn-move" id="btnR">→</button>
-    <button class="btn btn-rot" id="btnRR">↻</button>
+    <button class="btn btn-rot" id="bRL">↺</button>
+    <button class="btn btn-move" id="bL">←</button>
+    <button class="btn btn-jump" id="bJ">↑</button>
+    <button class="btn btn-move" id="bR">→</button>
+    <button class="btn btn-rot" id="bRR">↻</button>
   </div>
 </div>
 <div class="row2">
@@ -45,281 +47,266 @@ canvas{display:block;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.13)}
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 const CW=390,CH=390,T=20;
-const GARROWS=['↓','←','↑','→'];
+const GA=['↓','←','↑','→'];
 
-// ── Level 1 ──
-const L1={cols:19,rows:18,grav:0,sx:1,sy:16,
-  hint:'提示：被牆擋住，旋轉讓重力朝左再往上爬',
-  map:new Uint8Array([
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  ])};
+const L1={cols:19,rows:18,grav:0,sx:1,sy:16,hint:'被牆擋住 → 旋轉讓重力朝左再往上爬',
+map:new Uint8Array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])};
 
-// ── Level 2 ──
-const L2={cols:19,rows:18,grav:0,sx:17,sy:1,
-  hint:'提示：橫向牆各有缺口，需旋轉兩次穿越',
-  map:new Uint8Array([
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  ])};
+const L2={cols:19,rows:18,grav:0,sx:17,sy:1,hint:'橫向牆各有缺口 → 需旋轉兩次穿越',
+map:new Uint8Array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])};
 
 let LEVELS=[L1,L2,null];
 
-// ── Hell generator 100×100 ──
-function buildMaze(W,H){
+function genHellSync(){
+  const W=101,H=101;
   const map=new Uint8Array(W*H).fill(1);
   const vis=new Uint8Array(W*H);
-  function idx(c,r){return r*W+c;}
-  function o(c,r){if(c>0&&c<W-1&&r>0&&r<H-1)map[idx(c,r)]=0;}
-  // Iterative DFS
-  const stk=[[1,1]];
-  vis[idx(1,1)]=1;o(1,1);
+  const stk=[[1,1]]; vis[1*W+1]=1; map[1*W+1]=0;
   while(stk.length){
-    const[c,r]=stk[stk.length-1];
-    const nb=[];
+    const[c,r]=stk[stk.length-1]; const nb=[];
     for(const[dc,dr]of[[-2,0],[2,0],[0,-2],[0,2]]){
       const nc=c+dc,nr=r+dr;
-      if(nc>0&&nc<W-1&&nr>0&&nr<H-1&&!vis[idx(nc,nr)])nb.push([nc,nr,dc>>1,dr>>1]);
+      if(nc>0&&nc<W-1&&nr>0&&nr<H-1&&!vis[nr*W+nc])nb.push([nc,nr,dc>>1,dr>>1]);
     }
     if(!nb.length){stk.pop();continue;}
     const[nc,nr,mc,mr]=nb[Math.floor(Math.random()*nb.length)];
-    vis[idx(nc,nr)]=1;
-    o(c+mc,r+mr);o(nc,nr);
-    stk.push([nc,nr]);
+    vis[nr*W+nc]=1; map[(r+mr)*W+(c+mc)]=0; map[nr*W+nc]=0; stk.push([nc,nr]);
   }
-  return map;
-}
-
-function genHellSync(){
-  const W=101,H=101; // odd so DFS aligns perfectly → 10201 cells
-  const map=buildMaze(W,H);
-  function idx(c,r){return r*W+c;}
-  function get(c,r){if(c<0||c>=W||r<0||r>=H)return 1;return map[idx(c,r)];}
-  function o(c,r){if(c>0&&c<W-1&&r>0&&r<H-1)map[idx(c,r)]=0;}
-
-  // Extra loops ~4%
-  for(let i=0;i<Math.floor(W*H*0.04);i++)
-    o(1+Math.floor(Math.random()*(W-2)),1+Math.floor(Math.random()*(H-2)));
-
-  // Gravity gates: seal horizontal or vertical passages at ~25 spots
-  const oddCells=[];
-  for(let r=3;r<H-3;r+=2)for(let c=3;c<W-3;c+=2)oddCells.push([c,r]);
-  for(let i=oddCells.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[oddCells[i],oddCells[j]]=[oddCells[j],oddCells[i]];}
-  for(const[c,r]of oddCells.slice(0,25)){
-    if(Math.random()<0.5){map[idx(c-1,r)]=1;map[idx(c+1,r)]=1;}
-    else{map[idx(c,r-1)]=1;map[idx(c,r+1)]=1;}
+  function o(c,r){if(c>0&&c<W-1&&r>0&&r<H-1)map[r*W+c]=0;}
+  function get(c,r){if(c<0||c>=W||r<0||r>=H)return 1;return map[r*W+c];}
+  for(let i=0;i<Math.floor(W*H*0.04);i++)o(1+Math.floor(Math.random()*(W-2)),1+Math.floor(Math.random()*(H-2)));
+  const oc=[];
+  for(let r=3;r<H-3;r+=2)for(let c=3;c<W-3;c+=2)oc.push([c,r]);
+  for(let i=oc.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[oc[i],oc[j]]=[oc[j],oc[i]];}
+  for(const[c,r]of oc.slice(0,25)){
+    if(Math.random()<0.5){map[r*W+(c-1)]=1;map[r*W+(c+1)]=1;}
+    else{map[(r-1)*W+c]=1;map[(r+1)*W+c]=1;}
   }
-
-  // Border
-  for(let c=0;c<W;c++){map[idx(c,0)]=1;map[idx(c,H-1)]=1;}
-  for(let r=0;r<H;r++){map[idx(0,r)]=1;map[idx(W-1,r)]=1;}
-
-  // Start top-left, goal bottom-right
+  for(let c=0;c<W;c++){map[0*W+c]=1;map[(H-1)*W+c]=1;}
+  for(let r=0;r<H;r++){map[r*W+0]=1;map[r*W+(W-1)]=1;}
   function nearOpen(tc,tr){
     for(let d=0;d<20;d++)for(let dr=-d;dr<=d;dr++)for(let dc=-d;dc<=d;dc++){
       if(Math.abs(dc)+Math.abs(dr)!==d)continue;
       const c=tc+dc,r=tr+dr;
       if(c>0&&c<W-1&&r>0&&r<H-1&&get(c,r)===0)return{c,r};
-    }
-    return{c:tc,r:tr};
+    }return{c:tc,r:tr};
   }
-  const sp=nearOpen(1,1);
-  const gp=nearOpen(W-2,H-2);
+  const sp=nearOpen(1,1),gp=nearOpen(W-2,H-2);
   for(const[dc,dr]of[[0,0],[1,0],[-1,0],[0,1],[0,-1]])o(sp.c+dc,sp.r+dr);
-  map[idx(gp.c,gp.r)]=2;
-
-  // BFS reachability
-  function settle(c,r,g){
-    const dc=[0,-1,0,1][g],dr=[1,0,-1,0][g];
-    for(let i=0;i<W+H;i++){
-      const nc=c+dc,nr=r+dr;
-      if(get(nc,nr)===1)return{c,r};
-      c=nc;r=nr;
-    }
-    return{c,r};
-  }
+  map[gp.r*W+gp.c]=2;
+  function settle(c,r,g){const dc=[0,-1,0,1][g],dr=[1,0,-1,0][g];for(let i=0;i<W+H;i++){if(get(c+dc,r+dr)===1)return{c,r};c+=dc;r+=dr;}return{c,r};}
   function bfs(sc,sr,sg){
-    const seen=new Uint8Array(4*W*H);
-    const q=new Int32Array(4*W*H*3);
-    let head=0,tail=0;
-    function enq(c,r,g){const k=g*W*H+r*W+c;if(seen[k])return;seen[k]=1;q[tail*3]=c;q[tail*3+1]=r;q[tail*3+2]=g;tail++;}
-    const s0=settle(sc,sr,sg);
-    enq(s0.c,s0.r,sg);
-    while(head<tail){
-      const c=q[head*3],r=q[head*3+1],g=q[head*3+2];head++;
+    const seen=new Uint8Array(4*W*H);const q=[];let qi=0;
+    function enq(c,r,g){const k=g*W*H+r*W+c;if(seen[k])return;seen[k]=1;q.push(c,r,g);}
+    const s0=settle(sc,sr,sg);enq(s0.c,s0.r,sg);
+    while(qi<q.length){
+      const c=q[qi],r=q[qi+1],g=q[qi+2];qi+=3;
       const perps=[[[-1,0],[1,0]],[[0,-1],[0,1]],[[1,0],[-1,0]],[[0,1],[0,-1]]][g];
       const[odc,odr]=[[0,-1],[1,0],[0,1],[-1,0]][g];
       for(const[dc2,dr2]of perps){
         let cc=c,rr=r;
         for(let s=0;s<W+H;s++){
-          if(get(cc+dc2,rr+dr2)===1)break;
-          cc+=dc2;rr+=dr2;
+          if(get(cc+dc2,rr+dr2)===1)break; cc+=dc2;rr+=dr2;
           const land=settle(cc,rr,g);
           for(let ng=0;ng<4;ng++){const rl=settle(land.c,land.r,ng);enq(rl.c,rl.r,ng);}
           for(let j=1;j<=6;j++){
-            const jc=land.c+odc*j,jr=land.r+odr*j;
-            if(get(jc,jr)===1)break;
-            const jl=settle(jc,jr,g);
+            if(get(land.c+odc*j,land.r+odr*j)===1)break;
+            const jl=settle(land.c+odc*j,land.r+odr*j,g);
             for(let ng=0;ng<4;ng++){const rl=settle(jl.c,jl.r,ng);enq(rl.c,rl.r,ng);}
           }
         }
       }
-    }
-    return seen;
+    }return seen;
   }
-  const reach=bfs(sp.c,sp.r,0);
-  let ok=false;
+  const reach=bfs(sp.c,sp.r,0);let ok=false;
   for(let g=0;g<4;g++)if(reach[g*W*H+gp.r*W+gp.c]){ok=true;break;}
-
-  // If not reachable, carve a guaranteed path along border inner edge
-  if(!ok){
-    for(let c=1;c<W-1;c++)o(c,1);
-    for(let r=1;r<H-1;r++)o(W-2,r);
-    map[idx(gp.c,gp.r)]=2;
-  }
-
-  return{cols:W,rows:H,grav:0,sx:sp.c,sy:sp.r,
-    hint:`地獄關 ${W}×${H}（${W*H}格迷宮）起點↖ 終點↘ 需多次旋轉 😈`,map};
+  if(!ok){for(let c=1;c<W-1;c++)o(c,1);for(let r=1;r<H-1;r++)o(W-2,r);map[gp.r*W+gp.c]=2;}
+  return{cols:W,rows:H,grav:0,sx:sp.c,sy:sp.r,hint:'地獄關 101×101 起點↖ 終點↘ 😈',map};
 }
 
 function regenHell(){
-  const el=document.getElementById('loading');
-  el.style.display='block';
-  // Defer to next frame so browser paints the message first
-  setTimeout(()=>{
-    LEVELS[2]=genHellSync();
-    el.style.display='none';
-    if(lvl===2)init(2);
-  },30);
+  document.getElementById('loading').style.display='block';
+  setTimeout(()=>{LEVELS[2]=genHellSync();document.getElementById('loading').style.display='none';if(lvl===2)init(2);},30);
 }
 
-// ── Game state ──
+// ── State ──
 let map,grav,COLS,ROWS,lvl;
-let px,py,vx,vy,rotCount,won,winTimer;
-let rotating=false,rotAngle=0,targetAngle=0;
+let px,py,vx,vy,rotCount,won,winTimer,dead,deadTimer;
+let rotating,rotAngle,targetAngle,mapOpen;
+let enemies=[];
 const keys={};
-const PW=7,PH=9;
+const PW=7,PH=9,EW=7,EH=7;
 
 function tileAt(c,r){if(c<0||c>=COLS||r<0||r>=ROWS)return 1;return map[r*COLS+c];}
 
+function spawnEnemies(){
+  enemies=[];
+  if(lvl===0){
+    enemies.push({x:8*T+T/2, y:16*T+T/2,vx:0,vy:0,spd:1.2,dir:1});
+    enemies.push({x:14*T+T/2,y:4*T+T/2, vx:0,vy:0,spd:1.0,dir:-1});
+  } else if(lvl===1){
+    enemies.push({x:8*T+T/2, y:4*T+T/2, vx:0,vy:0,spd:1.4,dir:1});
+    enemies.push({x:5*T+T/2, y:8*T+T/2, vx:0,vy:0,spd:1.2,dir:-1});
+    enemies.push({x:10*T+T/2,y:12*T+T/2,vx:0,vy:0,spd:1.3,dir:1});
+  } else {
+    const open=[];
+    for(let r=2;r<ROWS-2;r++)for(let c=2;c<COLS-2;c++)if(tileAt(c,r)===0)open.push({c,r});
+    for(let i=open.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[open[i],open[j]]=[open[j],open[i]];}
+    for(let i=0;i<Math.min(14,open.length);i++){
+      const{c,r}=open[i];
+      enemies.push({x:c*T+T/2,y:r*T+T/2,vx:0,vy:0,spd:0.9+Math.random()*0.8,dir:Math.random()>0.5?1:-1});
+    }
+  }
+}
+
+function updateEnemies(){
+  // gravity acceleration
+  const GX=[0,-1,0,1][grav]*0.45;
+  const GY=[1,0,-1,0][grav]*0.45;
+  for(const e of enemies){
+    e.vx+=GX; e.vy+=GY;
+    e.vx=Math.max(-6,Math.min(6,e.vx));
+    e.vy=Math.max(-6,Math.min(6,e.vy));
+
+    // Move X then resolve
+    e.x+=e.vx;
+    {const t0=Math.floor((e.y-EH)/T),t1=Math.floor((e.y+EH-0.01)/T);
+     const cl=Math.floor((e.x-EW)/T),cr=Math.floor((e.x+EW-0.01)/T);
+     for(let rr=t0;rr<=t1;rr++){
+       if(tileAt(cl,rr)===1){e.x=cl*T+T+EW;e.vx=0;}
+       if(tileAt(cr,rr)===1){e.x=cr*T-EW;  e.vx=0;}
+     }}
+
+    // Move Y then resolve
+    e.y+=e.vy;
+    {const cl=Math.floor((e.x-EW)/T),cr=Math.floor((e.x+EW-0.01)/T);
+     const rt=Math.floor((e.y-EH)/T),rb=Math.floor((e.y+EH-0.01)/T);
+     for(let cc=cl;cc<=cr;cc++){
+       if(tileAt(cc,rt)===1){e.y=rt*T+T+EH;e.vy=0;}
+       if(tileAt(cc,rb)===1){e.y=rb*T-EH;  e.vy=0;}
+     }}
+
+    // Settled = there's a wall in the gravity direction just beyond the enemy
+    let settled=false;
+    if(grav===0){// gravity down: check one pixel below bottom edge
+      const rb=Math.floor((e.y+EH+1)/T);
+      settled=tileAt(Math.floor(e.x/T),rb)===1;
+    } else if(grav===2){// gravity up: check above top edge
+      const rt=Math.floor((e.y-EH-1)/T);
+      settled=tileAt(Math.floor(e.x/T),rt)===1;
+    } else if(grav===1){// gravity left: check left of left edge
+      const cl=Math.floor((e.x-EW-1)/T);
+      settled=tileAt(cl,Math.floor(e.y/T))===1;
+    } else {// gravity right: check right of right edge
+      const cr=Math.floor((e.x+EW+1)/T);
+      settled=tileAt(cr,Math.floor(e.y/T))===1;
+    }
+
+    if(settled){
+      // patrol perpendicular to gravity
+      if(grav===0||grav===2){
+        // move along X axis
+        e.vx=e.spd*e.dir; e.vy=0;
+        // peek ahead to reverse at walls or ledges
+        const nextX=e.x+e.vx+(e.dir>0?EW:-EW);
+        const midR=Math.floor(e.y/T);
+        const nextC=Math.floor(nextX/T);
+        // floor check: one tile below (grav0) or above (grav2) the next column
+        const floorR=grav===0?midR+1:midR-1;
+        if(tileAt(nextC,midR)===1||tileAt(nextC,floorR)!==1)e.dir*=-1;
+      } else {
+        // move along Y axis (grav1=left, grav3=right)
+        e.vy=e.spd*e.dir; e.vx=0;
+        const nextY=e.y+e.vy+(e.dir>0?EH:-EH);
+        const midC=Math.floor(e.x/T);
+        const nextR=Math.floor(nextY/T);
+        // wall check: one tile to the left (grav1) or right (grav3)
+        const wallC=grav===1?midC-1:midC+1;
+        if(tileAt(midC,nextR)===1||tileAt(wallC,nextR)!==1)e.dir*=-1;
+      }
+    }
+
+    // kill player on touch
+    if(Math.abs(e.x-px)<EW+PW-2&&Math.abs(e.y-py)<EH+PH-2){dead=true;deadTimer=80;}
+  }
+}
+
 function init(n){
   const L=LEVELS[n];
-  if(!L){
-    // Hell not ready yet — show loading and generate
-    if(n===2){regenHell();return;}
-    return;
-  }
-  lvl=n;
-  COLS=L.cols;ROWS=L.rows;
-  map=L.map;
-  grav=L.grav;rotAngle=[0,90,180,270][grav];targetAngle=rotAngle;
-  rotating=false;
+  if(!L){if(n===2)regenHell();return;}
+  lvl=n;COLS=L.cols;ROWS=L.rows;map=L.map;
+  grav=L.grav;rotAngle=[0,90,180,270][grav];targetAngle=rotAngle;rotating=false;
   px=L.sx*T+T/2;py=L.sy*T+T/2;
-  vx=0;vy=0;rotCount=0;won=false;winTimer=0;
+  vx=0;vy=0;rotCount=0;won=false;winTimer=0;dead=false;deadTimer=0;mapOpen=false;
   document.getElementById('lv').textContent=(n+1)+'/3';
   document.getElementById('rc').textContent=0;
-  document.getElementById('gv').textContent=GARROWS[grav];
+  document.getElementById('gv').textContent=GA[grav];
+  document.getElementById('btnMap').textContent='地圖 🗺️';
+  spawnEnemies();
 }
 function restart(){init(lvl);}
-
+function toggleMap(){mapOpen=!mapOpen;document.getElementById('btnMap').textContent=mapOpen?'關閉地圖 ✕':'地圖 🗺️';}
 function doRotate(dir){
-  if(rotating||won)return;
+  if(rotating||won||dead)return;
   rotating=true;targetAngle=rotAngle+dir*90;
   grav=((grav-dir)%4+4)%4;
   rotCount++;
   document.getElementById('rc').textContent=rotCount;
-  document.getElementById('gv').textContent=GARROWS[grav];
+  document.getElementById('gv').textContent=GA[grav];
   vx=0;vy=0;
 }
 
 function moveX(x,y,dx){
   x+=dx;
   const t=Math.floor((y-PH)/T),b=Math.floor((y+PH-0.01)/T);
-  let hL=false,hR=false;
   const l=Math.floor((x-PW)/T),r=Math.floor((x+PW-0.01)/T);
+  let hL=false,hR=false;
   for(let row=t;row<=b;row++){
     if(tileAt(l,row)===1){x=l*T+T+PW;dx=0;hL=true;}
-    if(tileAt(r,row)===1){x=r*T-PW;dx=0;hR=true;}
+    if(tileAt(r,row)===1){x=r*T-PW;  dx=0;hR=true;}
   }
   return{x,dx,hL,hR};
 }
 function moveY(x,y,dy){
   y+=dy;
   const l=Math.floor((x-PW)/T),r=Math.floor((x+PW-0.01)/T);
-  let hT=false,hB=false;
   const t=Math.floor((y-PH)/T),b=Math.floor((y+PH-0.01)/T);
+  let hT=false,hB=false;
   for(let col=l;col<=r;col++){
     if(tileAt(col,t)===1){y=t*T+T+PH;dy=0;hT=true;}
-    if(tileAt(col,b)===1){y=b*T-PH;dy=0;hB=true;}
+    if(tileAt(col,b)===1){y=b*T-PH;  dy=0;hB=true;}
   }
   return{y,dy,hT,hB};
 }
 
 function update(){
   if(!map)return;
+  if(dead){deadTimer--;if(deadTimer<=0)restart();return;}
   if(won){winTimer--;if(winTimer<=0&&lvl<2)init(lvl+1);return;}
   if(rotating){
-    const d=targetAngle-rotAngle;
-    rotAngle+=d*0.22;
+    const d=targetAngle-rotAngle;rotAngle+=d*0.22;
     if(Math.abs(d)<0.5){rotAngle=targetAngle;rotating=false;}
-    return;
+    updateEnemies();return;
   }
-  vx+=[0,-1,0,1][grav]*0.48;
-  vy+=[1,0,-1,0][grav]*0.48;
+  vx+=[0,-1,0,1][grav]*0.48; vy+=[1,0,-1,0][grav]*0.48;
   const SP=2.8,FR=0.62;
-  if(grav===0){if(keys.L)vx=-SP;else if(keys.R)vx=SP;else vx*=FR;}
-  else if(grav===1){if(keys.L)vy=SP;else if(keys.R)vy=-SP;else vy*=FR;}
-  else if(grav===2){if(keys.L)vx=SP;else if(keys.R)vx=-SP;else vx*=FR;}
-  else{if(keys.L)vy=-SP;else if(keys.R)vy=SP;else vy*=FR;}
+  if(grav===0)     {if(keys.L)vx=-SP;else if(keys.R)vx=SP; else vx*=FR;}
+  else if(grav===1){if(keys.L)vy=SP; else if(keys.R)vy=-SP;else vy*=FR;}
+  else if(grav===2){if(keys.L)vx=SP; else if(keys.R)vx=-SP;else vx*=FR;}
+  else             {if(keys.L)vy=-SP;else if(keys.R)vy=SP; else vy*=FR;}
   vx=Math.max(-8,Math.min(8,vx));vy=Math.max(-8,Math.min(8,vy));
   let rx=moveX(px,py,vx);px=rx.x;vx=rx.dx;
   let ry=moveY(px,py,vy);py=ry.y;vy=ry.dy;
-  const grounded=(grav===0&&ry.hB)||(grav===2&&ry.hT)||(grav===1&&rx.hL)||(grav===3&&rx.hR);
-  if(keys.J&&grounded){
-    const JS=7.2;
-    if(grav===0)vy=-JS;else if(grav===2)vy=JS;
-    else if(grav===1)vx=JS;else vx=-JS;
-  }
+  const grnd=(grav===0&&ry.hB)||(grav===2&&ry.hT)||(grav===1&&rx.hL)||(grav===3&&rx.hR);
+  if(keys.J&&grnd){const JS=7.2;if(grav===0)vy=-JS;else if(grav===2)vy=JS;else if(grav===1)vx=JS;else vx=-JS;}
   if(tileAt(Math.floor(px/T),Math.floor(py/T))===2){won=true;winTimer=lvl<2?110:9999;}
+  updateEnemies();
 }
 
 function draw(){
   ctx.clearRect(0,0,CW,CH);
   ctx.fillStyle='#E5E5EA';ctx.fillRect(0,0,CW,CH);
   if(!map)return;
-
   const mapW=COLS*T,mapH=ROWS*T;
   let camX=Math.max(0,Math.min(px-CW/2,mapW-CW));
   let camY=Math.max(0,Math.min(py-CH/2,mapH-CH));
@@ -331,25 +318,31 @@ function draw(){
   ctx.translate(-CW/2,-CH/2);
   ctx.translate(-camX,-camY);
 
-  // Only draw visible tiles
-  const c0=Math.max(0,Math.floor(camX/T)-1);
-  const c1=Math.min(COLS,c0+Math.ceil(CW/T)+3);
-  const r0=Math.max(0,Math.floor(camY/T)-1);
-  const r1=Math.min(ROWS,r0+Math.ceil(CH/T)+3);
-
+  // Tiles
+  const c0=Math.max(0,Math.floor(camX/T)-1),c1=Math.min(COLS,c0+Math.ceil(CW/T)+3);
+  const r0=Math.max(0,Math.floor(camY/T)-1),r1=Math.min(ROWS,r0+Math.ceil(CH/T)+3);
   for(let r=r0;r<r1;r++)for(let c=c0;c<c1;c++){
     const t=map[r*COLS+c],x=c*T,y=r*T;
-    if(t===1){
-      ctx.fillStyle='#3A3A4C';ctx.fillRect(x,y,T,T);
-      ctx.fillStyle='#44445A';ctx.fillRect(x+1,y+1,T-2,T-2);
-    }else if(t===2){
+    if(t===1){ctx.fillStyle='#3A3A4C';ctx.fillRect(x,y,T,T);ctx.fillStyle='#44445A';ctx.fillRect(x+1,y+1,T-2,T-2);}
+    else if(t===2){
       ctx.fillStyle='#FFF0B2';ctx.fillRect(x,y,T,T);
-      ctx.save();ctx.translate(x+T/2,y+T/2);
-      ctx.fillStyle='#FF9500';
-      ctx.beginPath();
-      for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,rr=i%2===0?8:4;i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
+      ctx.save();ctx.translate(x+T/2,y+T/2);ctx.fillStyle='#FF9500';
+      ctx.beginPath();for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,rr=i%2===0?8:4;i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);}
       ctx.closePath();ctx.fill();ctx.restore();
     }
+  }
+
+  // Enemies — drawn in world space, same transform
+  const pulse=0.8+0.2*Math.sin(Date.now()/200);
+  for(const e of enemies){
+    ctx.save();ctx.translate(e.x,e.y);
+    ctx.fillStyle=`rgba(220,50,50,${pulse})`;
+    ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,-1,4.5,0,Math.PI*2);ctx.fill();
+    const pdx=e.vx>0.3?2:e.vx<-0.3?-2:0,pdy=e.vy>0.3?2:e.vy<-0.3?-2:0;
+    ctx.fillStyle='#111';ctx.beginPath();ctx.arc(pdx,pdy-1,2.2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#900';ctx.fillRect(-6,6,4,5);ctx.fillRect(2,6,4,5);
+    ctx.restore();
   }
 
   // Player
@@ -362,23 +355,35 @@ function draw(){
   ctx.fillStyle='#3634A3';ctx.fillRect(-PW-1,5,5,4);ctx.fillRect(PW-4,5,5,4);
   ctx.restore();
 
-  ctx.restore();
+  ctx.restore(); // end world
 
-  // Minimap (hell only, toggle)
+  // Minimap
   if(lvl===2&&!won&&mapOpen){
-    const mS=1.8,mW=COLS*mS,mH=ROWS*mS;
-    const mx=CW-mW-6,my=6;
-    ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fillRect(mx-1,my-1,mW+2,mH+2);
+    const mS=3.2,mW=COLS*mS,mH=ROWS*mS;
+    const dispW=Math.min(mW,CW-16),dispH=Math.min(mH,CH-16);
+    const mx=(CW-dispW)/2,my=(CH-dispH)/2;
+    const offX=Math.max(0,Math.min((px/T)*mS-dispW/2,mW-dispW));
+    const offY=Math.max(0,Math.min((py/T)*mS-dispH/2,mH-dispH));
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,0.72)';ctx.fillRect(0,0,CW,CH);
+    ctx.fillStyle='rgba(255,255,255,0.95)';ctx.beginPath();ctx.roundRect(mx-2,my-2,dispW+4,dispH+4,8);ctx.fill();
+    ctx.beginPath();ctx.roundRect(mx,my,dispW,dispH,6);ctx.clip();
+    ctx.translate(mx-offX,my-offY);
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
       const t=map[r*COLS+c];
       ctx.fillStyle=t===1?'#3A3A4C':t===2?'#FF9500':'#E5E5EA';
-      ctx.fillRect(mx+c*mS,my+r*mS,mS,mS);
+      ctx.fillRect(c*mS,r*mS,mS,mS);
+    }
+    for(const e of enemies){
+      ctx.fillStyle='#DC3232';
+      ctx.beginPath();ctx.arc((e.x/T)*mS,(e.y/T)*mS,mS*1.8,0,Math.PI*2);ctx.fill();
     }
     ctx.fillStyle='#5856D6';
-    ctx.fillRect(mx+Math.floor(px/T)*mS-1,my+Math.floor(py/T)*mS-1,3,3);
+    ctx.beginPath();ctx.arc((px/T)*mS,(py/T)*mS,mS*2,0,Math.PI*2);ctx.fill();
+    ctx.restore();
   }
 
-  // Win overlay
+  // Win
   if(won){
     ctx.fillStyle='rgba(255,255,255,0.88)';ctx.fillRect(0,0,CW,CH);
     ctx.textAlign='center';
@@ -388,11 +393,19 @@ function draw(){
     ctx.fillText(lvl<2?'進入下一關...':'旋轉 '+rotCount+' 次，你是真勇者',CW/2,CH/2+16);
     ctx.textAlign='left';
   }
+  // Death
+  if(dead){
+    const t2=1-deadTimer/80;
+    ctx.fillStyle=`rgba(220,50,50,${t2*0.55})`;ctx.fillRect(0,0,CW,CH);
+    ctx.textAlign='center';
+    ctx.fillStyle='#fff';ctx.font='700 28px -apple-system,sans-serif';ctx.fillText('💀 被抓到了！',CW/2,CH/2);
+    ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font='14px -apple-system,sans-serif';ctx.fillText('重新開始中...',CW/2,CH/2+30);
+    ctx.textAlign='left';
+  }
 }
 
 function loop(){update();draw();requestAnimationFrame(loop);}
 
-// ── Input ──
 document.addEventListener('keydown',e=>{
   if([' ','ArrowUp','ArrowLeft','ArrowRight','ArrowDown'].includes(e.key))e.preventDefault();
   if(e.key==='ArrowLeft')keys.L=true;
@@ -412,20 +425,14 @@ function mob(id,dn,up){
   ['touchstart','mousedown'].forEach(ev=>b.addEventListener(ev,e=>{e.preventDefault();dn();},{passive:false}));
   if(up)['touchend','mouseup','touchcancel','mouseleave'].forEach(ev=>b.addEventListener(ev,e=>{e.preventDefault();up();},{passive:false}));
 }
-mob('btnL',()=>keys.L=true,()=>keys.L=false);
-mob('btnR',()=>keys.R=true,()=>keys.R=false);
-mob('btnRL',()=>doRotate(-1));
-mob('btnRR',()=>doRotate(1));
+mob('bL', ()=>keys.L=true, ()=>keys.L=false);
+mob('bR', ()=>keys.R=true, ()=>keys.R=false);
+mob('bJ', ()=>keys.J=true, ()=>keys.J=false);
+mob('bRL',()=>doRotate(-1));
+mob('bRR',()=>doRotate(1));
 
-let mapOpen=false;
-function toggleMap(){
-  mapOpen=!mapOpen;
-  document.getElementById('btnMap').textContent=mapOpen?'關閉地圖 ✕':'地圖 🗺️';
-}
-
-// Start immediately with L1, generate hell in background
 init(0);
 requestAnimationFrame(loop);
-setTimeout(()=>{ LEVELS[2]=genHellSync(); },100);
+setTimeout(()=>{LEVELS[2]=genHellSync();},100);
 </script>
 </body></html>
