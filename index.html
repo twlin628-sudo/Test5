@@ -152,7 +152,7 @@ function spawnEnemies(){
     const open=[];
     for(let r=2;r<ROWS-2;r++)for(let c=2;c<COLS-2;c++)if(tileAt(c,r)===0)open.push({c,r});
     for(let i=open.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[open[i],open[j]]=[open[j],open[i]];}
-    for(let i=0;i<Math.min(14,open.length);i++){
+    for(let i=0;i<Math.min(50,open.length);i++){
       const{c,r}=open[i];
       enemies.push({x:c*T+T/2,y:r*T+T/2,vx:0,vy:0,spd:0.9+Math.random()*0.8,dir:Math.random()>0.5?1:-1});
     }
